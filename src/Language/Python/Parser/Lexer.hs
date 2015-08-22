@@ -14,7 +14,7 @@ import Language.Python.Parser.State
 import qualified Text.Parsec as P
 import qualified Text.Parsec.Token as PT
 
--- https://docs.python.org/3.5/library/token.html
+-- https://github.com/python/cpython/blob/master/Include/token.h
 data Token
   = EndMarker
   | NewLine
