@@ -9,6 +9,7 @@ import Prelude hiding (lex)
 
 import Data.Char (isSpace)
 
+import Data.Maybe (maybeToList)
 import Control.Monad (void, guard, when)
 import Data.Functor.Identity
 
@@ -305,10 +306,8 @@ parseToken = P.choice
       P.char 'e'
       msign <- P.optionMaybe (P.oneOf "-+")
       ds <- P.many1 P.digit
-      return $ 'e' : concatSign msign ds
+      return $ 'e' : (maybeToList msign ++ ds)
     return . FloatLiteral . read $ as ++ "." ++ bs ++ cs
-    where
-      concatSign = maybe id (:)
   
   parseImLit :: LexemeParser Number
   parseImLit = do
