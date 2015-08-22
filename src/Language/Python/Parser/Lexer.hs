@@ -293,14 +293,17 @@ parseToken = P.choice
   parseIntLit = IntLiteral . read <$> P.many1 P.digit
   
   parseString :: LexemeParser String
-  parseString = parseStringLit '\'' <|> parseStringLit '"'
+  parseString = block <|> single <|> double
+    where
+      block   = parseStringLit "\"\"\"" P.anyChar
+      single  = parseStringLit "\'" (P.noneOf "\n") -- TODO multiline with backslash
+      double  = parseStringLit "\"" (P.noneOf "\n")
   
-  parseStringLit :: Char -> LexemeParser String
-  parseStringLit boundary = do
-    P.char boundary
-    cs <- concat <$> P.many (escapeSeq <|> ((:[]) <$> P.noneOf [boundary]))
-    P.char boundary
-    return cs
+  parseStringLit :: String -> LexemeParser Char -> LexemeParser String
+  parseStringLit delim cp = delimiter *> (concat <$> P.manyTill character delimiter)
+    where
+      delimiter = P.try (P.string delim)
+      character = escapeSeq <|> ((:[]) <$> cp)
   
   escapeSeq :: LexemeParser String
   escapeSeq = P.try $ do
