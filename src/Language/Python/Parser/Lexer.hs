@@ -201,7 +201,9 @@ parseLogicalLine = do
       
       implicitJoin <- (> 0) <$> getOpenBraces
       if implicitJoin then do
-        whitespace *> (parseComment <|> eol) *> whitespace *> continue
+        whitespace *> (parseComment <|> eol)
+        P.skipMany ignorable
+        whitespace *> continue
       else do
         explicitJoin <- whitespace *> P.optionMaybe (P.char '\\' *> eol)
         case explicitJoin of
