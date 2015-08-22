@@ -201,7 +201,7 @@ parseLogicalLine = do
       
       implicitJoin <- (> 0) <$> getOpenBraces
       if implicitJoin then do
-        whitespace *> (parseComment <|> eol)
+        whitespace *> (parseComment <|> (P.optional (P.char '\\') *> eol))
         P.skipMany ignorable
         whitespace *> continue
       else do
