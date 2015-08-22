@@ -14,6 +14,8 @@ import Language.Python.Parser.State
 import qualified Text.Parsec as P
 import qualified Text.Parsec.Token as PT
 
+import Debug.Trace (traceShowId, traceShowM)
+
 -- https://github.com/python/cpython/blob/master/Include/token.h
 data Token
   = EndMarker
@@ -153,9 +155,6 @@ parseIndentation = do
           putIndentLevels levels'
           return $ replicate (length pop) Dedent
 
-emptyLines :: LexemeParser ()
-emptyLines = P.skipMany emptyLine
-
 emptyLine :: LexemeParser ()
 emptyLine = void $ whitespace *> P.char '\n'
 
@@ -176,7 +175,7 @@ parseComment = (void $ lineComment) P.<?> "comment"
   lineComment :: LexemeParser String
   lineComment = P.string "#" *> P.manyTill P.anyChar (P.try eol)
 
-ignorable = P.try (emptyLine <|> (whitespace *> parseComment))
+ignorable = P.try emptyLine <|> P.try (whitespace *> parseComment)
 
 parseTokens :: LexemeParser [PositionedToken]
 parseTokens = do
@@ -202,7 +201,7 @@ parseLogicalLine = do
       
       implicitJoin <- (> 0) <$> getOpenBraces
       if implicitJoin then do
-        whitespace *> (parseComment <|> eol) *> continue
+        whitespace *> (parseComment <|> eol) *> whitespace *> continue
       else do
         explicitJoin <- whitespace *> P.optionMaybe (P.char '\\' *> eol)
         case explicitJoin of
@@ -284,7 +283,7 @@ parseToken = P.choice
   identStart = P.lower <|> P.upper <|> P.oneOf "_"
   
   identLetter :: LexemeParser Char
-  identLetter = P.alphaNum <|> P.oneOf "_'"
+  identLetter = P.alphaNum <|> P.oneOf "_"
   
   parseNumber :: LexemeParser Number
   parseNumber = parseIntLit
@@ -293,11 +292,12 @@ parseToken = P.choice
   parseIntLit = IntLiteral . read <$> P.many1 P.digit
   
   parseString :: LexemeParser String
-  parseString = block <|> single <|> double
+  parseString = blockSingle <|> blockDouble <|> single <|> double
     where
-      block   = parseStringLit "\"\"\"" P.anyChar
-      single  = parseStringLit "\'" (P.noneOf "\n") -- TODO multiline with backslash
-      double  = parseStringLit "\"" (P.noneOf "\n")
+      blockSingle = parseStringLit "\"\"\"" P.anyChar
+      blockDouble = parseStringLit "\'\'\'" P.anyChar
+      single      = parseStringLit "\'" (P.noneOf "\n") -- TODO multiline with backslash
+      double      = parseStringLit "\"" (P.noneOf "\n")
   
   parseStringLit :: String -> LexemeParser Char -> LexemeParser String
   parseStringLit delim cp = delimiter *> (concat <$> P.manyTill character delimiter)
