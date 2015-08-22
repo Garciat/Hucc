@@ -296,10 +296,12 @@ parseToken = P.choice
   parseString :: LexemeParser String
   parseString = blockSingle <|> blockDouble <|> single <|> double
     where
-      blockSingle = parseStringLit "\"\"\"" P.anyChar
-      blockDouble = parseStringLit "\'\'\'" P.anyChar
-      single      = parseStringLit "\'" (P.noneOf "\n") -- TODO multiline with backslash
-      double      = parseStringLit "\"" (P.noneOf "\n")
+      blockSingle = parseStringLit "\"\"\"" blockChar
+      blockDouble = parseStringLit "\'\'\'" blockChar
+      single      = parseStringLit "\'" singleChar
+      double      = parseStringLit "\"" singleChar
+      blockChar   = P.anyChar
+      singleChar  = P.noneOf "\n"
   
   parseStringLit :: String -> LexemeParser Char -> LexemeParser String
   parseStringLit delim cp = delimiter *> (concat <$> P.manyTill character delimiter)
@@ -310,20 +312,18 @@ parseToken = P.choice
   escapeSeq :: LexemeParser String
   escapeSeq = P.try $ do
     P.char '\\'
-    e <- P.anyChar
-    if e `elem` "'\"abfnrtv" then
-      return $ [represent e]
-    else
-      return $ ['\\', e]
+    e <- P.oneOf "'\"abfnrtv\n"
+    return $ represent e
     where
     represent e =
       case e of
-        '\''  -> '\''
-        '"'   -> '"'
-        'a'   -> '\a'
-        'b'   -> '\b'
-        'f'   -> '\f'
-        'n'   -> '\n'
-        'r'   -> '\r'
-        't'   -> '\t'
-        'v'   -> '\v'
+        '\''  -> "\'"
+        '"'   -> "\""
+        'a'   -> "\a"
+        'b'   -> "\b"
+        'f'   -> "\f"
+        'n'   -> "\n"
+        'r'   -> "\r"
+        't'   -> "\t"
+        'v'   -> "\v"
+        '\n'  -> []
