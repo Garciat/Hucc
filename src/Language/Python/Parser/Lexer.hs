@@ -84,7 +84,9 @@ data Token
   deriving (Show, Eq, Ord)
 
 data Number
-  = IntLiteral Int
+  = IntLiteral Integer
+  | FloatLiteral Double
+  | ImaginaryLiteral Double
   deriving (Show, Eq, Ord)
 
 data PositionedToken = PositionedToken
@@ -286,10 +288,33 @@ parseToken = P.choice
   identLetter = P.alphaNum <|> P.oneOf "_"
   
   parseNumber :: LexemeParser Number
-  parseNumber = parseIntLit
+  parseNumber = P.choice
+    [ P.try parseImLit
+    , P.try parseFloatLit
+    , P.try parseIntLit ]
   
   parseIntLit :: LexemeParser Number
   parseIntLit = IntLiteral . read <$> P.many1 P.digit
+  
+  parseFloatLit :: LexemeParser Number
+  parseFloatLit = do
+    as <- P.many P.digit
+    P.char '.'
+    bs <- P.many1 P.digit
+    cs <- P.option "e1" $ do
+      P.char 'e'
+      msign <- P.optionMaybe (P.oneOf "-+")
+      ds <- P.many1 P.digit
+      return $ 'e' : concatSign msign ds
+    return . FloatLiteral . read $ as ++ "." ++ bs ++ cs
+    where
+      concatSign = maybe id (:)
+  
+  parseImLit :: LexemeParser Number
+  parseImLit = do
+    (FloatLiteral n) <- parseFloatLit
+    P.oneOf "ij"
+    return . ImaginaryLiteral $ n
   
   parseString :: LexemeParser String
   parseString = blockSingle <|> blockDouble <|> single <|> double
