@@ -335,11 +335,12 @@ parseToken = P.choice
   escapeSeq :: LexemeParser String
   escapeSeq = P.try $ do
     P.char '\\'
-    e <- P.oneOf "'\"abfnrtv\n"
+    e <- P.oneOf "\\'\"abfnrtv\n"
     return $ represent e
     where
     represent e =
       case e of
+        '\\'  -> "\\"
         '\''  -> "\'"
         '"'   -> "\""
         'a'   -> "\a"
