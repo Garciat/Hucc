@@ -1,4 +1,9 @@
-module Language.Python.Parser.Lexer where
+module Language.Python.Parser.Lexer
+  ( PositionedToken(..)
+  , Token()
+  , lex
+  )
+  where
 
 import Prelude hiding (lex)
 
@@ -13,8 +18,6 @@ import Language.Python.Parser.State
 
 import qualified Text.Parsec as P
 import qualified Text.Parsec.Token as PT
-
-import Debug.Trace (traceShowId, traceShowM)
 
 -- https://github.com/python/cpython/blob/master/Include/token.h
 data Token
@@ -92,14 +95,17 @@ data PositionedToken = PositionedToken
 instance Show PositionedToken where
   show = show . ptToken
 
+lex :: FilePath -> String -> Either P.ParseError [PositionedToken]
+lex filePath input = P.runParser parseTokens def filePath input
+  where
+    def = LexParseState
+      { lpsOpenBraces = 0
+      , lpsIndentLevels = [0]
+      }
+
 data LexParseState = LexParseState
   { lpsOpenBraces   :: !Int -- (, [, {
   , lpsIndentLevels :: [Int]
-  }
-
-initialLexParserState = LexParseState
-  { lpsOpenBraces = 0
-  , lpsIndentLevels = [0]
   }
 
 type LexemeParser a = P.Parsec String LexParseState a
@@ -131,16 +137,21 @@ getIndentLevel = head <$> getIndentLevels
 pushIndentLevel :: Int -> LexemeParser ()
 pushIndentLevel n = putIndentLevels . (n:) =<< getIndentLevels
 
-lex :: FilePath -> String -> Either P.ParseError [PositionedToken]
-lex filePath input = P.runParser parseTokens initialLexParserState filePath input
-
 whitespace :: LexemeParser ()
 whitespace = P.skipMany (P.char ' ')
 
+parseTokens :: LexemeParser [PositionedToken]
+parseTokens = do
+  P.skipMany ignorable
+  tokens <- concat <$> P.many parseLogicalLine
+  P.eof
+  endIndents <- length . filter (>0) <$> getIndentLevels
+  dedents <- mapM position $ replicate endIndents Dedent
+  endMarker <- position EndMarker
+  return (tokens ++ dedents ++ [endMarker])
+
 parseIndentation :: LexemeParser [PositionedToken]
-parseIndentation = do
-    pos <- P.getPosition
-    map (PositionedToken pos) <$> go
+parseIndentation = mapM position =<< go
   where
     go = do
       curr <- length <$> P.many (P.char ' ')
@@ -150,19 +161,18 @@ parseIndentation = do
         GT -> return [Indent] <* pushIndentLevel curr
         LT -> do
           levels <- getIndentLevels
-          when (not $ elem curr levels) (P.unexpected "bad dedent")
+          when (not $ elem curr levels) (fail $ "indentation must be: " ++ show levels)
           let (pop, levels') = span (> curr) levels
           putIndentLevels levels'
           return $ replicate (length pop) Dedent
 
 emptyLine :: LexemeParser ()
-emptyLine = void $ whitespace *> P.char '\n'
+emptyLine = void (whitespace *> P.char '\n')
 
 eol :: LexemeParser ()
 eol = void (P.char '\n') P.<?> "newline"
 
-ending :: LexemeParser ()
-ending = eol <|> P.eof
+backslash = P.char '\\'
 
 position :: Token -> LexemeParser PositionedToken
 position t = do
@@ -177,18 +187,6 @@ parseComment = (void $ lineComment) P.<?> "comment"
 
 ignorable = P.try emptyLine <|> P.try (whitespace *> parseComment)
 
-parseTokens :: LexemeParser [PositionedToken]
-parseTokens = do
-  P.skipMany ignorable
-  tokens <- concat <$> P.many parseLogicalLine
-  P.eof
-  dedents <- mapM position =<< replicate . length . filter (>0) <$> getIndentLevels <*> pure Dedent
-  endMarker <- position EndMarker
-  return (tokens ++ dedents ++ [endMarker])
-
-snoc :: a -> [a] -> [a]
-snoc x xs = xs ++ [x]
-
 parseLogicalLine :: LexemeParser [PositionedToken]
 parseLogicalLine = do
   P.skipMany ignorable
@@ -201,20 +199,20 @@ parseLogicalLine = do
       
       implicitJoin <- (> 0) <$> getOpenBraces
       if implicitJoin then do
-        whitespace *> (parseComment <|> (P.optional (P.char '\\') *> eol))
+        whitespace
+        parseComment <|> (P.optional backslash *> eol)
         P.skipMany ignorable
-        whitespace *> continue
+        whitespace
+        continue
       else do
-        explicitJoin <- whitespace *> P.optionMaybe (P.char '\\' *> eol)
+        whitespace
+        explicitJoin <- P.optionMaybe (backslash *> eol)
         case explicitJoin of
-          Nothing   -> ((`snoc` tokens) <$> position NewLine) <* P.optional eol
+          Nothing   -> ((\t -> tokens ++ [t]) <$> position NewLine) <* P.optional eol
           otherwise -> whitespace *> continue
 
 parsePositionedToken :: LexemeParser PositionedToken
-parsePositionedToken = P.try $ do
-  pos <- P.getPosition
-  tok <- parseToken
-  return $ PositionedToken pos tok
+parsePositionedToken = P.try $ position =<< parseToken
 
 parseToken :: LexemeParser Token
 parseToken = P.choice
