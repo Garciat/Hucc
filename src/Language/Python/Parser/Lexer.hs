@@ -312,8 +312,10 @@ parseToken = P.choice
   
   parseImLit :: LexemeParser Number
   parseImLit = do
-    (FloatLiteral n) <- parseFloatLit
-    P.oneOf "ij"
+    lit <- (P.try parseFloatLit <|> parseIntLit) <* P.char 'j'
+    let n = case lit of
+              IntLiteral i   -> fromInteger i
+              FloatLiteral f -> f
     return . ImaginaryLiteral $ n
   
   parseString :: LexemeParser String
