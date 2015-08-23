@@ -8,20 +8,14 @@ module Language.Python.Parser.Lexer
 
 import Prelude hiding (lex)
 
-import Data.Char (isSpace, digitToInt)
+import Data.Char (digitToInt)
 
-import Data.Maybe (maybeToList)
-import Control.Monad (void, guard, when)
-import Data.Functor.Identity
-
+import Control.Monad (void, when)
 import Control.Applicative
-
-import Language.Python.Parser.State
 
 import Text.Parsec ((<?>))
 
 import qualified Text.Parsec as P
-import qualified Text.Parsec.Token as PT
 
 -- https://github.com/python/cpython/blob/master/Include/token.h
 data Token
@@ -176,7 +170,8 @@ emptyLine = void (whitespace *> P.char '\n')
 eol :: LexemeParser ()
 eol = void (P.char '\n') P.<?> "newline"
 
-backslash = P.char '\\'
+backslash :: LexemeParser ()
+backslash = void (P.char '\\')
 
 position :: Token -> LexemeParser PositionedToken
 position t = do
@@ -189,6 +184,7 @@ parseComment = (void $ lineComment) P.<?> "comment"
   lineComment :: LexemeParser String
   lineComment = P.string "#" *> P.manyTill P.anyChar (P.try eol)
 
+ignorable :: LexemeParser ()
 ignorable = P.try emptyLine <|> P.try (whitespace *> parseComment)
 
 parseLogicalLine :: LexemeParser [PositionedToken]
@@ -212,8 +208,8 @@ parseLogicalLine = do
           whitespace
           explicitJoin <- P.optionMaybe (backslash *> eol)
           case explicitJoin of
-            Nothing   -> ((\t -> tokens ++ [t]) <$> position NewLine) <* P.optional eol
-            otherwise -> whitespace *> continue
+            Nothing -> ((\t -> tokens ++ [t]) <$> position NewLine) <* P.optional eol
+            _       -> whitespace *> continue
 
 parsePositionedToken :: LexemeParser PositionedToken
 parsePositionedToken = P.try $ position =<< parseToken
@@ -369,6 +365,7 @@ parseToken = P.choice
                   where
                     toIm (IntLiteral i)   = ImaginaryLiteral (fromInteger i)
                     toIm (FloatLiteral f) = ImaginaryLiteral f
+                    toIm _                = error "unexpected"
   
   sign            :: Num a => LexemeParser (a -> a)
   sign            =   (P.char '-' >> return negate)
@@ -409,7 +406,7 @@ parseToken = P.choice
   
   escapeSeq :: LexemeParser String
   escapeSeq = P.try $ do
-    P.char '\\'
+    backslash
     e <- P.oneOf "\\'\"abfnrtv\n"
     return $ represent e
     where
@@ -426,3 +423,4 @@ parseToken = P.choice
         't'   -> "\t"
         'v'   -> "\v"
         '\n'  -> []
+        c     -> ['\\', c]
