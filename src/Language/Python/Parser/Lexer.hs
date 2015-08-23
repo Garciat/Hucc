@@ -220,7 +220,7 @@ parseToken :: LexemeParser Token
 parseToken = P.choice
   [ Name          <$> parseName
   , Number        <$> P.try number
-  , StringLiteral <$> parseString
+  , StringLiteral <$> stringLiteral
   
   , P.try $ P.char '('      *> incOpenBraces *> pure LParen
   , P.try $ P.char ')'      *> decOpenBraces *> pure RParen
@@ -395,8 +395,8 @@ parseToken = P.choice
   -- Strings
   -----------------------------------------------------------
   
-  parseString :: LexemeParser String
-  parseString = blockSingle <|> blockDouble <|> single <|> double
+  stringLiteral   :: LexemeParser String
+  stringLiteral   = blockSingle <|> blockDouble <|> single <|> double
     where
       blockSingle = parseStringLit "\"\"\"" blockChar
       blockDouble = parseStringLit "\'\'\'" blockChar
@@ -405,13 +405,19 @@ parseToken = P.choice
       blockChar   = P.anyChar
       singleChar  = P.noneOf "\n"
   
-  parseStringLit :: String -> LexemeParser Char -> LexemeParser String
-  parseStringLit delim cp = delimiter *> (concat <$> P.manyTill character delimiter)
-    where
-      delimiter = P.try (P.string delim)
-      character = stringEscape <|> ((:[]) <$> cp)
+  parseStringLit          :: String -> LexemeParser Char -> LexemeParser String
+  parseStringLit delim cp = do{ delimiter
+                              ; cs <- P.manyTill character delimiter
+                              ; return (concat cs)
+                              }
+                          where
+                            delimiter =   P.try (P.string delim)
+                            character =   stringEscape
+                                      <|> do{ c <- cp; return [c] }
   
-  stringEscape  :: LexemeParser [Char]
+  -- Escape Sequences
+  
+  stringEscape    :: LexemeParser [Char]
   stringEscape    = do{ backslash
                       ; escLF <|> charNum <|> charEsc <|> escUnknown
                       -- TODO accept unicode name aliases: \N{name}
