@@ -15,6 +15,8 @@ import Control.Applicative
 
 import Text.Parsec ((<?>))
 
+import Language.Python.Parser.Common
+
 import qualified Text.Parsec as P
 
 -- https://github.com/python/cpython/blob/master/Include/token.h
@@ -377,12 +379,17 @@ parseToken = P.choice
   octInteger      = do{ P.oneOf "oO"; baseInteger 8   P.octDigit    }
   binInteger      = do{ P.oneOf "bB"; baseInteger 2  (P.oneOf "01") }
   
-  baseInteger :: Integer -> LexemeParser Char -> LexemeParser Integer
+  baseInteger :: Int -> LexemeParser Char -> LexemeParser Integer
   baseInteger base baseDigit
     = do{ digits <- P.many1 baseDigit
-        ; let n = foldl (\x d -> base*x + toInteger (digitToInt d)) 0 digits
+        ; let n = readBase base digits
         ; seq n (return n)
         }
+  
+  readBase :: Int -> String -> Integer
+  readBase base cs =
+    let b = toInteger base in
+    foldl (\x d -> b*x + toInteger (digitToInt d)) 0 cs
   
   -----------------------------------------------------------
   -- Strings
@@ -402,25 +409,30 @@ parseToken = P.choice
   parseStringLit delim cp = delimiter *> (concat <$> P.manyTill character delimiter)
     where
       delimiter = P.try (P.string delim)
-      character = escapeSeq <|> ((:[]) <$> cp)
+      character = stringEscape <|> ((:[]) <$> cp)
   
-  escapeSeq :: LexemeParser String
-  escapeSeq = P.try $ do
-    backslash
-    e <- P.oneOf "\\'\"abfnrtv\n"
-    return $ represent e
-    where
-    represent e =
-      case e of
-        '\\'  -> "\\"
-        '\''  -> "\'"
-        '"'   -> "\""
-        'a'   -> "\a"
-        'b'   -> "\b"
-        'f'   -> "\f"
-        'n'   -> "\n"
-        'r'   -> "\r"
-        't'   -> "\t"
-        'v'   -> "\v"
-        '\n'  -> []
-        c     -> ['\\', c]
+  stringEscape  :: LexemeParser [Char]
+  stringEscape    = do{ backslash
+                      ; escLF <|> charNum <|> charEsc <|> escUnknown
+                      -- TODO accept unicode name aliases: \N{name}
+                      }
+  
+  escUnknown      = do{ c <- P.anyChar; return ['\\', c] }
+  escLF           = do{ P.char '\n'; return [] }
+  charNum         = do{ code <- charOct <|> charHex <|> charU16 <|> charU32
+                      ; return [toEnum (fromInteger code)]
+                      }
+  
+  charOct         = readBase 8 <$> countRange 1 3 P.octDigit
+  charHex         = do { P.char 'x'; readBase 16 <$> P.count 2 P.hexDigit }
+  charU16         = do { P.char 'u'; readBase 16 <$> P.count 4 P.hexDigit }
+  charU32         = do { P.char 'U'; readBase 16 <$> P.count 8 P.hexDigit }
+  
+  charEsc         :: LexemeParser [Char]
+  charEsc         = P.choice (map parseEsc escMap)
+                    where
+                      parseEsc :: (Char, Char) -> LexemeParser [Char]
+                      parseEsc (c, code)    = do{ P.char c; return [code] }
+  
+  escMap = zip ("abfnrtv\\\"\'") ("\a\b\f\n\r\t\v\\\"\'")
+  
