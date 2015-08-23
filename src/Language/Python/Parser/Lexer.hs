@@ -229,34 +229,11 @@ parseToken = P.choice
   , P.try $ P.char '{'      *> incOpenBraces *> pure LBrace
   , P.try $ P.char '}'      *> decOpenBraces *> pure RBrace
   
+  , P.try $ P.string "..."  *> pure Ellipsis
   , P.try $ P.char ':'      *> pure Colon
   , P.try $ P.char ','      *> pure Comma
   , P.try $ P.char ';'      *> pure Semi
-  , P.try $ P.string "..."  *> pure Ellipsis
   , P.try $ P.char '.'      *> pure Dot
-  
-  , P.try $ P.char '~'      *> pure Tilde
-  , P.try $ P.char '+'      *> pure Plus
-  , P.try $ P.char '-'      *> pure Minus
-  , P.try $ P.char '*'      *> pure Star
-  , P.try $ P.char '/'      *> pure Slash
-  , P.try $ P.char '|'      *> pure VBar
-  , P.try $ P.char '&'      *> pure Amper
-  , P.try $ P.char '<'      *> pure Less
-  , P.try $ P.char '>'      *> pure Greater
-  , P.try $ P.char '='      *> pure Equal
-  , P.try $ P.char '%'      *> pure Percent
-  , P.try $ P.char '^'      *> pure Circumflex
-  , P.try $ P.string "<<"   *> pure LShift
-  , P.try $ P.string ">>"   *> pure RShift
-  , P.try $ P.string "**"   *> pure DoubleStar
-  , P.try $ P.string "//"   *> pure DoubleSlash
-  , P.try $ P.char '@'      *> pure At
-  
-  , P.try $ P.string "=="   *> pure EqEqual
-  , P.try $ P.string "!="   *> pure NotEqual
-  , P.try $ P.string "<="   *> pure LessEqual
-  , P.try $ P.string ">="   *> pure GreaterEqual
   
   , P.try $ P.string "+="   *> pure PlusEqual
   , P.try $ P.string "-="   *> pure MinusEqual
@@ -273,6 +250,29 @@ parseToken = P.choice
   , P.try $ P.string "**="  *> pure DoubleStarEqual
   , P.try $ P.string "//="  *> pure DoubleSlashEqual
   , P.try $ P.string "@="   *> pure At
+  
+  , P.try $ P.string "=="   *> pure EqEqual
+  , P.try $ P.string "!="   *> pure NotEqual
+  , P.try $ P.string "<="   *> pure LessEqual
+  , P.try $ P.string ">="   *> pure GreaterEqual
+  
+  , P.try $ P.string "<<"   *> pure LShift
+  , P.try $ P.string ">>"   *> pure RShift
+  , P.try $ P.string "**"   *> pure DoubleStar
+  , P.try $ P.string "//"   *> pure DoubleSlash
+  , P.try $ P.char '~'      *> pure Tilde
+  , P.try $ P.char '+'      *> pure Plus
+  , P.try $ P.char '-'      *> pure Minus
+  , P.try $ P.char '*'      *> pure Star
+  , P.try $ P.char '/'      *> pure Slash
+  , P.try $ P.char '|'      *> pure VBar
+  , P.try $ P.char '&'      *> pure Amper
+  , P.try $ P.char '<'      *> pure Less
+  , P.try $ P.char '>'      *> pure Greater
+  , P.try $ P.char '='      *> pure Equal
+  , P.try $ P.char '%'      *> pure Percent
+  , P.try $ P.char '^'      *> pure Circumflex
+  , P.try $ P.char '@'      *> pure At
   ] <* whitespace
   
   where
