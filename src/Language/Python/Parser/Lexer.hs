@@ -306,6 +306,7 @@ parseToken = P.choice
   
   zeroNumber :: LexemeParser Number
   zeroNumber =  IntLiteral <$> (hexInteger <|> octInteger <|> binInteger)
+            <|> (FloatLiteral <$> fractExp 0)
             <|> decNumber
             <|> return (IntLiteral 0)
   
