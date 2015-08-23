@@ -300,20 +300,27 @@ parseToken = P.choice
               }
   
   intFloatNumber :: LexemeParser Number
-  intFloatNumber =    (P.char '0' *> zeroNumber)
+  intFloatNumber =    (P.skipMany1 (P.char '0') *> zeroNumber)
                   <|> fractNumber
                   <|> decNumber
   
   zeroNumber :: LexemeParser Number
-  zeroNumber =  IntLiteral <$> (hexInteger <|> octInteger <|> binInteger)
-            <|> (FloatLiteral <$> fractExp 0)
-            <|> decNumber
-            <|> return (IntLiteral 0)
+  zeroNumber =  do{ int <- hexInteger <|> octInteger <|> binInteger
+                  ; return (IntLiteral int)
+                  }
+              <|>
+                do{ int <- P.option 0 decInteger
+                  ; float <- fractExp int
+                  ; return (FloatLiteral float)
+                  }
+              <|>
+                do{ return (IntLiteral 0)
+                  }
   
   decNumber :: LexemeParser Number
-  decNumber =  do{ n <- decInteger
-                 ; P.option (IntLiteral n) (FloatLiteral <$> fractExp n)
-                 }
+  decNumber = do{ n <- decInteger
+                ; P.option (IntLiteral n) (FloatLiteral <$> fractExp n)
+                }
   
   fractNumber :: LexemeParser Number
   fractNumber = do{ P.char '.'
