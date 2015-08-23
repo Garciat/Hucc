@@ -1,6 +1,7 @@
 module Language.Python.Parser.Lexer
   ( PositionedToken(..)
-  , Token()
+  , Token(..)
+  , Number(..)
   , lex
   )
   where
@@ -202,17 +203,17 @@ parseLogicalLine = do
       
       implicitJoin <- (> 0) <$> getOpenBraces
       if implicitJoin then do
-        whitespace
-        parseComment <|> (P.optional backslash *> eol)
-        P.skipMany ignorable
-        whitespace
-        continue
-      else do
-        whitespace
-        explicitJoin <- P.optionMaybe (backslash *> eol)
-        case explicitJoin of
-          Nothing   -> ((\t -> tokens ++ [t]) <$> position NewLine) <* P.optional eol
-          otherwise -> whitespace *> continue
+          whitespace
+          parseComment <|> (P.optional backslash *> eol)
+          P.skipMany ignorable
+          whitespace
+          continue
+        else do
+          whitespace
+          explicitJoin <- P.optionMaybe (backslash *> eol)
+          case explicitJoin of
+            Nothing   -> ((\t -> tokens ++ [t]) <$> position NewLine) <* P.optional eol
+            otherwise -> whitespace *> continue
 
 parsePositionedToken :: LexemeParser PositionedToken
 parsePositionedToken = P.try $ position =<< parseToken
@@ -294,86 +295,90 @@ parseToken = P.choice
   -- Numbers
   -----------------------------------------------------------
   
-  number :: LexemeParser Number
-  number =  do{ n <- intFloatNumber
-              ; P.option n (imaginaryTag n)
-              }
+  number          :: LexemeParser Number
+  number          = do{ n <- intFloatNumber
+                      ; P.option n (imaginaryTag n)
+                      }
   
-  intFloatNumber :: LexemeParser Number
-  intFloatNumber =    (P.skipMany1 (P.char '0') *> zeroNumber)
+  intFloatNumber  :: LexemeParser Number
+  intFloatNumber  = do{ P.skipMany1 (P.char '0')
+                      ; zeroNumber
+                      }
                   <|> fractNumber
                   <|> decNumber
   
-  zeroNumber :: LexemeParser Number
-  zeroNumber =  do{ int <- hexInteger <|> octInteger <|> binInteger
-                  ; return (IntLiteral int)
-                  }
-              <|>
-                do{ int <- P.option 0 decInteger
-                  ; float <- fractExp int
-                  ; return (FloatLiteral float)
-                  }
-              <|>
-                do{ return (IntLiteral 0)
-                  }
+  zeroNumber      :: LexemeParser Number
+  zeroNumber      = do{ int <- hexInteger <|> octInteger <|> binInteger
+                      ; return (IntLiteral int)
+                      }
+                  <|>
+                    do{ int <- P.option 0 decInteger
+                      ; float <- fractExp int
+                      ; return (FloatLiteral float)
+                      }
+                  <|>
+                    do{ return (IntLiteral 0)
+                      }
   
-  decNumber :: LexemeParser Number
-  decNumber = do{ n <- decInteger
-                ; P.option (IntLiteral n) (FloatLiteral <$> fractExp n)
-                }
+  decNumber       :: LexemeParser Number
+  decNumber       = do{ n <- decInteger
+                      ; P.option (IntLiteral n) (FloatLiteral <$> fractExp n)
+                      }
   
-  fractNumber :: LexemeParser Number
-  fractNumber = do{ P.char '.'
-                  ; f <- fraction
-                  ; e <- P.option 1.0 exponent'
-                  ; return (FloatLiteral (f * e))
-                  }
+  fractNumber     :: LexemeParser Number
+  fractNumber     = do{ P.char '.'
+                      ; f <- fraction
+                      ; e <- P.option 1.0 exponent'
+                      ; return (FloatLiteral (f * e))
+                      }
   
-  fractExp :: Integer -> LexemeParser Double
-  fractExp n =  do{ P.char '.'
-                  ; f <- P.option 0.0 fraction
-                  ; e <- P.option 1.0 exponent'
-                  ; return ((fromInteger n + f) * e)
-                  }
-              <|>
-                do{ e <- exponent'
-                  ; return ((fromInteger n) * e)
-                  }
+  fractExp        :: Integer -> LexemeParser Double
+  fractExp n      = do{ P.char '.'
+                      ; f <- P.option 0.0 fraction
+                      ; e <- P.option 1.0 exponent'
+                      ; return ((fromInteger n + f) * e)
+                      }
+                  <|>
+                    do{ e <- exponent'
+                      ; return ((fromInteger n) * e)
+                      }
   
-  fraction :: LexemeParser Double
-  fraction = do{ digits <- P.many1 P.digit <?> "fraction"
-               ; return (foldr op 0.0 digits)
-               }
-             <?> "fraction"
-            where
-              op d f = (f + fromIntegral (digitToInt d))/10.0
+  fraction        :: LexemeParser Double
+  fraction        = do{ digits <- P.many1 P.digit <?> "fraction"
+                      ; return (foldr op 0.0 digits)
+                      }
+                    <?> "fraction"
+                    where
+                      op d f = (f + fromIntegral (digitToInt d))/10.0
   
-  exponent' :: LexemeParser Double
-  exponent' = do{ P.oneOf "eE"
-                ; f <- sign
-                ; e <- decInteger <?> "exponent"
-                ; return (power (f e))
-                }
-              <?> "exponent"
-            where
-               power e  | e < 0      = 1.0/power(-e)
-                        | otherwise  = fromInteger (10^e)
+  exponent'       :: LexemeParser Double
+  exponent'       = do{ P.oneOf "eE"
+                      ; f <- sign
+                      ; e <- decInteger <?> "exponent"
+                      ; return (power (f e))
+                      }
+                    <?> "exponent"
+                  where
+                     power e  | e < 0      = 1.0/power(-e)
+                              | otherwise  = fromInteger (10^e)
   
-  imaginaryTag :: Number -> LexemeParser Number
-  imaginaryTag n = P.char 'j' *> return (toIm n)
-                where
-                  toIm (IntLiteral i)   = ImaginaryLiteral (fromInteger i)
-                  toIm (FloatLiteral f) = ImaginaryLiteral f
+  imaginaryTag    :: Number -> LexemeParser Number
+  imaginaryTag n  = do{ P.char 'j'
+                      ; return (toIm n)
+                      }
+                  where
+                    toIm (IntLiteral i)   = ImaginaryLiteral (fromInteger i)
+                    toIm (FloatLiteral f) = ImaginaryLiteral f
   
-  sign :: Num a => LexemeParser (a -> a)
-  sign  =   (P.char '-' >> return negate)
-        <|> (P.char '+' >> return id)
-        <|> return id
+  sign            :: Num a => LexemeParser (a -> a)
+  sign            =   (P.char '-' >> return negate)
+                  <|> (P.char '+' >> return id)
+                  <|> return id
   
-  decInteger = baseInteger 10 P.digit
-  hexInteger = P.oneOf "xX" *> baseInteger 16 P.hexDigit
-  octInteger = P.oneOf "oO" *> baseInteger 8 P.octDigit
-  binInteger = P.oneOf "bB" *> baseInteger 2 (P.oneOf "01")
+  decInteger      = baseInteger 10 P.digit
+  hexInteger      = do{ P.oneOf "xX"; baseInteger 16  P.hexDigit    }
+  octInteger      = do{ P.oneOf "oO"; baseInteger 8   P.octDigit    }
+  binInteger      = do{ P.oneOf "bB"; baseInteger 2  (P.oneOf "01") }
   
   baseInteger :: Integer -> LexemeParser Char -> LexemeParser Integer
   baseInteger base baseDigit
