@@ -7,7 +7,7 @@ module Language.Python.Parser.Lexer
 
 import Prelude hiding (lex)
 
-import Data.Char (isSpace)
+import Data.Char (isSpace, digitToInt)
 
 import Data.Maybe (maybeToList)
 import Control.Monad (void, guard, when)
@@ -16,6 +16,8 @@ import Data.Functor.Identity
 import Control.Applicative
 
 import Language.Python.Parser.State
+
+import Text.Parsec ((<?>))
 
 import qualified Text.Parsec as P
 import qualified Text.Parsec.Token as PT
@@ -76,8 +78,6 @@ data Token
   | DoubleStarEqual
   | DoubleSlashEqual
   | AtEqual
-  
-  | Def
   
   | Name String
   | Number Number
@@ -219,7 +219,11 @@ parsePositionedToken = P.try $ position =<< parseToken
 
 parseToken :: LexemeParser Token
 parseToken = P.choice
-  [ P.try $ P.char '('      *> incOpenBraces *> pure LParen
+  [ Name          <$> parseName
+  , Number        <$> P.try number
+  , StringLiteral <$> parseString
+  
+  , P.try $ P.char '('      *> incOpenBraces *> pure LParen
   , P.try $ P.char ')'      *> decOpenBraces *> pure RParen
   , P.try $ P.char '['      *> incOpenBraces *> pure LSquare
   , P.try $ P.char ']'      *> decOpenBraces *> pure RSquare
@@ -229,8 +233,8 @@ parseToken = P.choice
   , P.try $ P.char ':'      *> pure Colon
   , P.try $ P.char ','      *> pure Comma
   , P.try $ P.char ';'      *> pure Semi
-  , P.try $ P.char '.'      *> pure Dot
   , P.try $ P.string "..."  *> pure Ellipsis
+  , P.try $ P.char '.'      *> pure Dot
   
   , P.try $ P.char '~'      *> pure Tilde
   , P.try $ P.char '+'      *> pure Plus
@@ -270,15 +274,13 @@ parseToken = P.choice
   , P.try $ P.string "**="  *> pure DoubleStarEqual
   , P.try $ P.string "//="  *> pure DoubleSlashEqual
   , P.try $ P.string "@="   *> pure At
-  
-  , P.try $ P.string "def"  *> pure Def
-  
-  , Name          <$> parseName
-  , Number        <$> parseNumber
-  , StringLiteral <$> parseString
   ] <* whitespace
   
   where
+  -----------------------------------------------------------
+  -- Identifiers
+  -----------------------------------------------------------
+  
   parseName :: LexemeParser String
   parseName = (:) <$> identStart <*> P.many identLetter
   
@@ -288,34 +290,93 @@ parseToken = P.choice
   identLetter :: LexemeParser Char
   identLetter = P.alphaNum <|> P.oneOf "_"
   
-  parseNumber :: LexemeParser Number
-  parseNumber = P.choice
-    [ P.try parseImLit
-    , P.try parseFloatLit
-    , P.try parseIntLit ]
+  -----------------------------------------------------------
+  -- Numbers
+  -----------------------------------------------------------
   
-  parseIntLit :: LexemeParser Number
-  parseIntLit = IntLiteral . read <$> P.many1 P.digit
+  number :: LexemeParser Number
+  number =  do{ n <- intFloatNumber
+              ; P.option n (imaginaryTag n)
+              }
   
-  parseFloatLit :: LexemeParser Number
-  parseFloatLit = do
-    as <- P.many P.digit
-    P.char '.'
-    bs <- P.many1 P.digit
-    cs <- P.option "e1" $ do
-      P.char 'e'
-      msign <- P.optionMaybe (P.oneOf "-+")
-      ds <- P.many1 P.digit
-      return $ 'e' : (maybeToList msign ++ ds)
-    return . FloatLiteral . read $ as ++ "." ++ bs ++ cs
+  intFloatNumber :: LexemeParser Number
+  intFloatNumber =    (P.char '0' *> zeroNumber)
+                  <|> fractNumber
+                  <|> decNumber
   
-  parseImLit :: LexemeParser Number
-  parseImLit = do
-    lit <- (P.try parseFloatLit <|> parseIntLit) <* P.char 'j'
-    let n = case lit of
-              IntLiteral i   -> fromInteger i
-              FloatLiteral f -> f
-    return . ImaginaryLiteral $ n
+  zeroNumber :: LexemeParser Number
+  zeroNumber =  IntLiteral <$> (hexInteger <|> octInteger <|> binInteger)
+            <|> decNumber
+            <|> return (IntLiteral 0)
+  
+  decNumber :: LexemeParser Number
+  decNumber =  do{ n <- decInteger
+                 ; P.option (IntLiteral n) (FloatLiteral <$> fractExp n)
+                 }
+  
+  fractNumber :: LexemeParser Number
+  fractNumber = do{ P.char '.'
+                  ; f <- fraction
+                  ; e <- P.option 1.0 exponent'
+                  ; return (FloatLiteral (f * e))
+                  }
+  
+  fractExp :: Integer -> LexemeParser Double
+  fractExp n =  do{ P.char '.'
+                  ; f <- P.option 0.0 fraction
+                  ; e <- P.option 1.0 exponent'
+                  ; return ((fromInteger n + f) * e)
+                  }
+              <|>
+                do{ e <- exponent'
+                  ; return ((fromInteger n) * e)
+                  }
+  
+  fraction :: LexemeParser Double
+  fraction = do{ digits <- P.many1 P.digit <?> "fraction"
+               ; return (foldr op 0.0 digits)
+               }
+             <?> "fraction"
+            where
+              op d f = (f + fromIntegral (digitToInt d))/10.0
+  
+  exponent' :: LexemeParser Double
+  exponent' = do{ P.oneOf "eE"
+                ; f <- sign
+                ; e <- decInteger <?> "exponent"
+                ; return (power (f e))
+                }
+              <?> "exponent"
+            where
+               power e  | e < 0      = 1.0/power(-e)
+                        | otherwise  = fromInteger (10^e)
+  
+  imaginaryTag :: Number -> LexemeParser Number
+  imaginaryTag n = P.char 'j' *> return (toIm n)
+                where
+                  toIm (IntLiteral i)   = ImaginaryLiteral (fromInteger i)
+                  toIm (FloatLiteral f) = ImaginaryLiteral f
+  
+  sign :: Num a => LexemeParser (a -> a)
+  sign  =   (P.char '-' >> return negate)
+        <|> (P.char '+' >> return id)
+        <|> return id
+  
+  decInteger = baseInteger 10 P.digit
+  hexInteger = P.oneOf "xX" *> baseInteger 16 P.hexDigit
+  octInteger = P.oneOf "oO" *> baseInteger 8 P.octDigit
+  binInteger = P.oneOf "bB" *> baseInteger 2 (P.oneOf "01")
+  
+  baseInteger :: Integer -> LexemeParser Char -> LexemeParser Integer
+  baseInteger base baseDigit
+    = do{ digits <- P.many1 baseDigit
+        ; let n = foldl (\x d -> base*x + toInteger (digitToInt d)) 0 digits
+        ; seq n (return n)
+        }
+  
+  -----------------------------------------------------------
+  -- Strings
+  -----------------------------------------------------------
   
   parseString :: LexemeParser String
   parseString = blockSingle <|> blockDouble <|> single <|> double
