@@ -218,22 +218,22 @@ parsePositionedToken = P.try $ position =<< parseToken
 
 parseToken :: LexemeParser Token
 parseToken = P.choice
-  [ Name          <$> parseName
-  , Number        <$> P.try number
-  , StringLiteral <$> stringLiteral
+  [ StringLiteral <$> stringLiteral
+  , Name          <$> parseName
+  , Number        <$> number
   
-  , P.try $ P.char '('      *> incOpenBraces *> pure LParen
-  , P.try $ P.char ')'      *> decOpenBraces *> pure RParen
-  , P.try $ P.char '['      *> incOpenBraces *> pure LSquare
-  , P.try $ P.char ']'      *> decOpenBraces *> pure RSquare
-  , P.try $ P.char '{'      *> incOpenBraces *> pure LBrace
-  , P.try $ P.char '}'      *> decOpenBraces *> pure RBrace
+  , P.char '('              *> incOpenBraces *> pure LParen
+  , P.char ')'              *> decOpenBraces *> pure RParen
+  , P.char '['              *> incOpenBraces *> pure LSquare
+  , P.char ']'              *> decOpenBraces *> pure RSquare
+  , P.char '{'              *> incOpenBraces *> pure LBrace
+  , P.char '}'              *> decOpenBraces *> pure RBrace
   
   , P.try $ P.string "..."  *> pure Ellipsis
-  , P.try $ P.char ':'      *> pure Colon
-  , P.try $ P.char ','      *> pure Comma
-  , P.try $ P.char ';'      *> pure Semi
-  , P.try $ P.char '.'      *> pure Dot
+  , P.char ':'              *> pure Colon
+  , P.char ','              *> pure Comma
+  , P.char ';'              *> pure Semi
+  , P.char '.'              *> pure Dot
   
   , P.try $ P.string "+="   *> pure PlusEqual
   , P.try $ P.string "-="   *> pure MinusEqual
@@ -260,19 +260,19 @@ parseToken = P.choice
   , P.try $ P.string ">>"   *> pure RShift
   , P.try $ P.string "**"   *> pure DoubleStar
   , P.try $ P.string "//"   *> pure DoubleSlash
-  , P.try $ P.char '~'      *> pure Tilde
-  , P.try $ P.char '+'      *> pure Plus
-  , P.try $ P.char '-'      *> pure Minus
-  , P.try $ P.char '*'      *> pure Star
-  , P.try $ P.char '/'      *> pure Slash
-  , P.try $ P.char '|'      *> pure VBar
-  , P.try $ P.char '&'      *> pure Amper
-  , P.try $ P.char '<'      *> pure Less
-  , P.try $ P.char '>'      *> pure Greater
-  , P.try $ P.char '='      *> pure Equal
-  , P.try $ P.char '%'      *> pure Percent
-  , P.try $ P.char '^'      *> pure Circumflex
-  , P.try $ P.char '@'      *> pure At
+  , P.char '~'              *> pure Tilde
+  , P.char '+'              *> pure Plus
+  , P.char '-'              *> pure Minus
+  , P.char '*'              *> pure Star
+  , P.char '/'              *> pure Slash
+  , P.char '|'              *> pure VBar
+  , P.char '&'              *> pure Amper
+  , P.char '<'              *> pure Less
+  , P.char '>'              *> pure Greater
+  , P.char '='              *> pure Equal
+  , P.char '%'              *> pure Percent
+  , P.char '^'              *> pure Circumflex
+  , P.char '@'              *> pure At
   ] <* whitespace
   
   where
@@ -324,7 +324,8 @@ parseToken = P.choice
                       }
   
   fractNumber     :: LexemeParser Number
-  fractNumber     = do{ P.char '.'
+  fractNumber     = do{ P.lookAhead (P.try (P.char '.' >> P.digit))
+                      ; P.char '.'
                       ; f <- fraction
                       ; e <- P.option 1.0 exponent'
                       ; return (FloatLiteral (f * e))
