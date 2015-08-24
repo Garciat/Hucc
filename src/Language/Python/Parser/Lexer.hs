@@ -398,6 +398,8 @@ parseToken = P.choice
   -- Strings
   -----------------------------------------------------------
   
+  -- TODO string prefixes; bytes literal
+  
   stringLiteral   :: LexemeParser String
   stringLiteral   = blockSingle <|> blockDouble <|> single <|> double
     where
