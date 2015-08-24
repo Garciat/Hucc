@@ -362,7 +362,7 @@ parseToken = P.choice
                               | otherwise  = fromInteger (10^e)
   
   imaginaryTag    :: Number -> LexemeParser Number
-  imaginaryTag n  = do{ P.char 'j'
+  imaginaryTag n  = do{ P.oneOf "jJ"
                       ; return (toIm n)
                       }
                   where
