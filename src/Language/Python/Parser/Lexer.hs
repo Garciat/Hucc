@@ -295,6 +295,8 @@ parseToken = P.choice
   -- Numbers
   -----------------------------------------------------------
   
+  -- TODO imaginary literals can't be hex, oct, or bin
+  
   number          :: LexemeParser Number
   number          = do{ n <- intFloatNumber
                       ; P.option n (imaginaryTag n)
