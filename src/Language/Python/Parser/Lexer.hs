@@ -81,11 +81,80 @@ data Token
   | StringLiteral String
   deriving (Show, Eq, Ord)
 
+prettyPrintToken :: Token -> String
+prettyPrintToken t =
+  case t of
+    EndMarker         -> "<eof>"
+    NewLine           -> "<newline>"
+    Indent            -> "<indent>"
+    Dedent            -> "<dedent>"
+    
+    LParen            -> "("
+    RParen            -> ")"
+    LSquare           -> "["
+    RSquare           -> "]"
+    LBrace            -> "{"
+    RBrace            -> "}"
+    
+    Colon             -> ":"
+    Comma             -> ","
+    Semi              -> ";"
+    Dot               -> "."
+    Ellipsis          -> "..."
+    
+    Tilde             -> "`"
+    Plus              -> "+"
+    Minus             -> "-"
+    Star              -> "*"
+    Slash             -> "/"
+    VBar              -> "|"
+    Amper             -> "&"
+    Less              -> "<"
+    Greater           -> ">"
+    Equal             -> "="
+    Percent           -> "%"
+    Circumflex        -> "^"
+    LShift            -> "<<"
+    RShift            -> ">>"
+    DoubleStar        -> "**"
+    DoubleSlash       -> "//"
+    At                -> "@"
+    
+    EqEqual           -> "=="
+    NotEqual          -> "!="
+    LessEqual         -> "<="
+    GreaterEqual      -> ">="
+    
+    PlusEqual         -> "+="
+    MinusEqual        -> "-="
+    StarEqual         -> "*="
+    SlashEqual        -> "/="
+    VBarEqual         -> "|="
+    AmperEqual        -> "&="
+    PercentEqual      -> "%="
+    CircumflexEqual   -> "^="
+    LShiftEqual       -> "<<="
+    RShiftEqual       -> ">>="
+    DoubleStarEqual   -> "**="
+    DoubleSlashEqual  -> "//="
+    AtEqual           -> "@="
+    
+    Name s            -> show s
+    Number n          -> show n
+    StringLiteral s   -> show s
+
 data Number
   = IntLiteral Integer
   | FloatLiteral Double
   | ImaginaryLiteral Double
-  deriving (Show, Eq, Ord)
+  deriving (Eq, Ord)
+
+instance Show Number where
+  show n =
+    case n of
+      IntLiteral i        -> show i
+      FloatLiteral f      -> show f
+      ImaginaryLiteral j  -> show j
 
 data PositionedToken = PositionedToken
   { ptSourcePos :: P.SourcePos
